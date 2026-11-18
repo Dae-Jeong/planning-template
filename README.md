@@ -30,7 +30,18 @@ python3 /path/to/planning-template/scripts/init_planning.py \
 
 - 회사 레포에 이미 `AGENTS.md`가 있으면 절대 덮어쓰지 않고 옆에 `AGENTS.planning.snippet.md`로 분리 생성합니다.
 - `--local-exclude`가 `<company-repo>/.git/info/exclude`에 `/planning/`과 `/AGENTS.planning.snippet.md`를 자동 등록하므로 **팀원 PR에 섞이지 않으면서 로컬 에이전트는 100% 동일하게 `planning/` 체계를 읽고 작업**합니다.
-- 팀 공유 문서로 정식 편입할 때는 `--local-exclude` 없이 생성(또는 `.git/info/exclude` 항목만 제거)해 그대로 커밋하면 됩니다.
+- 나중에 팀 공유 문서로 정식 편입할 때는 `<company-repo>/.git/info/exclude`에서 `# planning-template local-only solo mode` 아래 항목만 지운 뒤 `git add planning/`으로 그대로 커밋하면 됩니다.
+
+### Step 3. 세팅 직후 에이전트에 던질 첫 온보딩 프롬프트
+
+기존 회사 레포에 `init_planning.py`를 실행한 직후, 에이전트 세션에 아래 한 줄을 던지면 빈 골격을 현재 코드베이스 기준으로 즉시 채울 수 있습니다:
+
+```text
+AGENTS.planning.snippet.md(또는 AGENTS.md)와 planning/README.md 규칙을 읽고,
+현재 레포의 코드와 설정을 스캔해서 planning/10-decision.md(확정 DEC / 미결 OPEN),
+planning/rules/policy-direction.md(서비스 전제 및 가드레일), planning/20-spec.md 초안을 채운 뒤
+sync_planning.py와 check_planning.py까지 통과시켜줘.
+```
 
 ---
 
