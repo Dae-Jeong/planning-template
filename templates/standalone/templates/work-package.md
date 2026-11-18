@@ -4,11 +4,17 @@
 
 ## 메타
 
+- Phase: 1
 - Status: draft
 - Owner:
 - Covers SPEC: __PROJECT_CODE__-SPEC-NNN
 - Related Decision: __PROJECT_CODE__-DEC-NNN
 - Dependencies: -
+- Blocker: -
+- Human Check: none
+- Reusable Insight: none
+
+> `Human Check` 작성 규칙: 순수 백엔드/DB/자동화 테스트로 검증이 완결되면 `none`으로 두고 검증 후 `Status: agent_verified`로 전환합니다. 사람 눈(시각 레이아웃·실단말·외부 알림 등) 확인이 필요하면 확인할 내용을 1줄로 구체적으로 적고 `Status: awaiting_human`으로 전환합니다.
 
 ## Scope
 
@@ -56,10 +62,10 @@
 
 ## Release Gate
 
-- [ ] 연결된 SPEC / Decision 최신화
+- [ ] 연결된 SPEC / Decision 최신화 (해소된 `OPEN-*` 잔존 없음)
 - [ ] Log / DB 정합성 / FE 동작(`Tool` 근거) 확인
 - [ ] Residual risk / Unknown 분리 기록
-- [ ] Decision Owner 또는 QA 최종 확인 (`ready_for_qa` → `done`)
+- [ ] Decision Owner / Human Check 최종 확인 (`sync_planning.py --accept` 또는 `--accept-verified` 시 자동 체크)
 
 ## Residual Risk / Verification Log
 

@@ -1,108 +1,70 @@
-# 에이전트 실전 운용 플레이북
+# 에이전트 실전 운용 플레이북 (v1.1)
 
-이 문서는 `lets_talk` 프로젝트에서 실증된 **다중 에이전트(사람 + 오케스트레이터/검증자 + 구현 워커) 실전 운용 규약**을 표준화합니다. 문서 형식만 있고 운용 루프가 없으면 기획과 코드가 며칠 만에 어긋나므로, 아래 7가지 메커니즘을 기본 규칙으로 삼습니다.
+이 문서는 `lets_talk` 실전 운용에서 검증된 장점을 살리고, 당시 발생했던 3가지 마찰(**수동 보드 불일치 · 검증 큐 적체 · 앞단 스펙 노후화**)을 구조적으로 제거한 표준 운용 규약입니다.
 
 ---
 
-## 1. Anti-Bloat JIT (착수 시점 적재)
+## 1. Single Writer + Auto-Sync (`30-work.md` 수동 표 편집 금지)
 
-- 로드맵 단계에서 `work-001.md ~ work-050.md`를 미리 생성하지 않습니다.
-- `30-work.md`의 로드맵 표에만 **1줄 요약(WP ID, 제목, Context, 크기, 의존성, Stage)**으로 등록해 둡니다.
-- **`30-work/work-NNN-{slug}.md` 파일은 실제로 그 WP에 착수할 때만 작성**합니다.
-- 구현 규모가 예상보다 크면 하나의 WP를 A/B/C 분할하거나 독립 하위 WP로 쪼개되, SPEC 없는 백로그 기능은 `10-decision.md`의 Out-of-Scope/Backlog로만 남깁니다.
+- 각 WP의 메타(`Phase`, `Status`, `Owner`, `Covers SPEC`, `Blocker`, `Human Check`, `Reusable Insight`)는 **`30-work/work-NNN-*.md` 파일 1곳만** 수정합니다.
+- `30-work.md`의 4개 `AUTO` 블록(`HUMAN_QUEUE`, `WP_BOARD`, `SPEC_COVERAGE`, `OPEN_MIRROR`)은 `sync_planning.py`가 자동 생성합니다.
+- 미착수 기능은 `30-work.md`의 `신규 기능 로드맵` 표에 1줄로만 걸어두고, 착수하여 `work-NNN-*.md` 파일을 생성하는 순간 로드맵 표에서 제거합니다(`check_planning.py`가 중복 잔존 차단).
 
 ---
 
 ## 2. 2커밋 실행 & 회수 사이클
 
-기능/수정 단위 WP는 다음 2단계 흐름으로 진행합니다:
-
 1. **1단계 (`plan: WP-NNN ...`)**:
-   - `work-NNN-*.md` 작성 (`Goal`, `Scope In/Out`, `Domain/Contract`, `Execution Plan`, `Test/QA Plan`, `REQ-*` 표, `Release Gate`).
-   - 기존 코드·스펙을 먼저 읽어 불필요한 추상화나 범위 확장을 제거합니다.
+   - `work-NNN-*.md` 작성 (`Scope In/Out`, `Domain/Contract`, `Human Check`, `REQ-*` 표, `Release Gate`).
+   - `30-work.md` 로드맵 표에서 해당 행을 제거하고 `sync_planning.py` 실행.
 2. **2단계 (`WP-NNN ...`)**:
-   - TDD 기반 구현 및 단위/통합/계약 테스트 통과.
-   - `work-NNN-*.md` 하단에 실행 증거(`Log` / `DB` / `FE` 요약 및 미검증 한계) 기록.
-   - **`30-work.md` 상태 갱신 + `planning/log.md` 번호 매긴 엔트리(`## YYYY-MM-DD (N)`) 추가**로 회수를 닫습니다.
+   - TDD 구현 + `Log / DB / FE` 1차 증거 확보 후 기술 Release Gate `[x]` 체크.
+   - `Status`를 `agent_verified` 또는 `awaiting_human`으로 갱신 → `sync_planning.py` 실행 → `planning/log.md` 회수 기록 추가 → `check_planning.py` 통과 확인.
 
 ---
 
-## 3. 3자 역할 분리 & 엄격한 `ready_for_qa` 게이트
+## 3. 2트랙 검증 게이트 (`agent_verified` vs `awaiting_human`)
 
-실행 환경 권한에 따라 역할을 분리합니다(1인+AI 또는 다중 AI 모두 적용):
-
-| 역할 | 책임 범위 | 금지 / 정지 규칙 |
-| --- | --- | --- |
-| **Decision Owner (사람)** | `OPEN-*` 확정, 6대 Red Line 승인, GUI 시각·OS·실사용 손검증, **최종 `done` 승격** | Tier 2/3 세부 문구/정렬 디테일까지 매번 병목으로 잡지 않음 |
-| **Planner / Verifier (오케스트레이터)** | `10-decision`/`20-spec`/`policy-direction` 가드레일 설계, 권한 환경에서 **실기동(Docker/DB/Playwright) 검증 재현**, 리뷰 필터링 | 구현 워커의 "테스트 통과" 자기보고를 무검증 신뢰해 `done` 처리 금지 |
-| **Implementer / Reviewer (구현 워커)** | Sandbox 내 TDD 구현, `policy-direction.md` 가드레일 안의 Tier 2/3 정책 확정, Read-only 패턴 리뷰 | 권한 밖 인프라 검증 실패 시 `qa_blocked`로 멈추지 않고 **`ready_for_qa` + `검증 대기`**로 인계 |
-
-### 상태 머신
+사람 승인 큐가 마비되지 않도록 검증 완료 상태를 `Human Check:` 유무에 따라 2갈래로 나눕니다:
 
 ```text
-draft ──▶ in_dev ──▶ ready_for_qa ──▶ (검증/손검증 통과) ──▶ ready_for_release / done
-                        │
-                        └── 결함/차단 시 ─▶ qa_blocked (해소 조건 명시) ─▶ in_dev
+draft ──▶ in_dev ──┬── (Human Check: none + 기술 Gate [x]) ──▶ agent_verified ──(--accept-verified)──▶ done
+                   │
+                   └── (Human Check: <1줄> + 기술 Gate [x]) ─▶ awaiting_human ──(--accept WP-ID)────▶ done
 ```
 
-- **보여지는 진척 ≠ 진짜 진척**: 에이전트는 구현과 자동 테스트가 끝났더라도, 실기동·GUI·사람 확인이 남아 있으면 임의로 `done`으로 올리지 않고 반드시 **`ready_for_qa`**에 멈춥니다.
+- **`agent_verified`**: 백엔드·DB·리팩터링·자동 E2E로 검증이 완결돼 사람 눈 확인이 불필요한 WP. 사람 큐를 점유하지 않으며 배포/Phase 컷 때 `sync_planning.py --accept-verified` 1줄로 일괄 `done` 마감합니다.
+- **`awaiting_human`**: 레이아웃 감성, 모바일 뷰포트, OS 알림, 실단말 등 사람이 직접 봐야 할 항목이 있는 WP. `30-work.md` 최상단 `Human Sign-off Queue` 표에 확인 1줄만 자동 추출되며, 사람이 확인 후 `sync_planning.py --accept <WP-ID>`로 닫습니다.
+- **`qa_blocked`**: 결함(`FAIL`) 또는 환경 제약(`UNKNOWN`)으로 정지된 상태. 반드시 `Blocker:`에 구체적 해소 조건을 적습니다.
 
 ---
 
 ## 4. Red Line 기반 정책 위임 (`policy-direction.md`)
 
-모든 사소한 정책 결정마다 사람에게 질문을 던지면 속도가 죽고, 반대로 기준 없이 AI가 결정하면 제품 계약이 망가집니다. 이를 풀기 위해 `rules/policy-direction.md`에 **위임 영역과 Red Line**을 나눕니다.
+- **위임(에이전트 확정 후 근거 기록)**: 서비스 전제와 기본 스탠스 안에서 세부 정책 변수·문구·정렬 디테일 결정.
+- **6대 Red Line (사람 전용 — 에이전트 단독 확정 금지)**:
+  1. 제품 Scope 변경 (v1 In/Out 추가·삭제)
+  2. 인증 · 보안 · 권한 모델 변경
+  3. 데이터 영구 삭제 · 보존 기한 · 백업 정책
+  4. 외부 노출 (공개 가입, 비인증 공유 링크 등)
+  5. 비용 발생 선택 (유료 API, 관리형 클라우드 서비스)
+  6. 미결 `OPEN-*` 결정의 임의 확정
 
-- **위임(에이전트 확정 후 보드/근거 기록)**: 서비스 전제(내부 도구 vs 공개 SaaS, 참고 서비스 관례)와 영역별 기본 스탠스(soft delete, 입력 길이 제한, 에러 문구 톤 등) 안에서 세부 변수·UI 디테일 결정.
-- **6대 Red Line (사람 승인 전용 — 에이전트 임의 확정 금지)**:
-  1. **제품 Scope 변경** (v1 In/Out 기능 추가·삭제)
-  2. **인증·보안·권한 모델 변경**
-  3. **데이터 영구 삭제 · 보존 기한 · 백업 정책**
-  4. **외부 노출** (공개 가입, 비인증 공유 링크 등)
-  5. **비용 발생 선택** (유료 API, 클라우드 관리형 서비스 도입)
-  6. **미결 `OPEN-*` 결정의 임의 확정**
+> **`OPEN-*` 역추적 차단**: `10-decision.md`에서 `OPEN-NNN`이 `DEC`로 확정되어 미결 표에서 빠지면, `20-spec*`나 `30-work*`에 남아 있던 `OPEN-NNN` 문구도 즉시 갱신해야 합니다(`check_planning.py`가 `stale-open-reference`로 자동 검출).
 
 ---
 
 ## 5. 성공 판단 3종 1차 증거 & 근거 라벨
 
-Build / Typecheck / Unit Test 통과는 **전제 조건**이지 완료 증거가 아닙니다. 완료·QA 보고는 반드시 아래 근거 라벨을 구분해 적습니다:
-
-| 라벨 | 의미 |
-| --- | --- |
-| `Source` | `10-decision`, `20-spec`, 공식 스펙 문서 인용 |
-| `Code` | `파일:라인` 기준 구현 근거 |
-| `Tool` | 실제 실행된 명령 출력, 테스트 결과, 로그, DB 쿼리, HTTP/Browser 캡처 |
-| `Inference` | 관찰된 사실에서 도출한 추론 (단독 완료 근거 불가) |
-| `Unknown` | 환경·권한 제약 등으로 미확인된 사실 (숨기지 않고 명시) |
-
-### 3종 1차 증거 (기능 성격에 맞춰 적용)
-
-1. **Log**: 구조화 로그에 기대한 처리 흐름이 기록되고 예상치 못한 Error/Warn이 없는가
-2. **DB 정합성**: 실제 row 생성/수정/tombstone/idempotency 제약이 DB 상태와 일치하는가
-3. **FE 기능 동작**: 화면 전환·새로고침 잔존·에러 안내 + **Network negative evidence**(발생하지 말아야 할 요청이 실제로 안 나갔는지)가 확인됐는가
+Build / Typecheck / Unit Test 통과는 전제일 뿐입니다. 보고 시 `Source / Code / Tool / Inference / Unknown` 라벨을 구분하고 다음 3종 증거를 남깁니다:
+1. **Log**: 기대 처리 흐름 완료 로그 및 에러/경고 부재
+2. **DB 정합성**: 실제 저장 row, 상태 전이, tombstone, 멱등성 중복 0건
+3. **FE 동작 (+ Network negative)**: 화면 동작 및 발생하지 말아야 할 요청의 미전송 확인
 
 ---
 
-## 6. 정기 디자인 패턴 리뷰 브레이크
+## 6. 정기 5-WP 디자인 패턴 리뷰 & 3단계 QA Sweep & 교훈 증류(`--distill`)
 
-빠른 WP 구현이 4~5개 누적되면 DDD 경계·레이어 역참조·중복 추상화가 급격히 썩습니다. 다음 트리거가 오면 구현을 멈추고 패턴 리뷰를 돌립니다:
-
-- **트리거**: Phase 완료 시 **또는 누적 5개 WP 구현마다**(둘 중 먼저 도래), 혹은 새 bounded context / 인프라(예: 데스크톱 셸, 미디어 파이프라인) 도입 직후.
-- **범위**: 직전 리뷰 기준점 이후 `git diff <last-review-commit>...HEAD`만 검사 (무작정 전체 레포 스캔 금지).
-- **점검 초점**: DDD context 누수, handler/controller 내 도메인 로직 침투, 트랜잭션 경계, 데이터/표현 분리, 과잉 방어코드/추상화.
-- **처리 루프**:
-  1. Read-only 리뷰어(또는 별도 에이전트)가 후보 리포트 작성
-  2. 검증자가 실제 코드로 거짓 양성·과잉 리팩터링을 필터링 (**채택 vs 기각 분리**)
-  3. 채택된 항목만 **개별 리팩터링 WP**로 등록, 기각/보류 항목은 `OPEN` 또는 `Release Gate`에 기록
-  4. `planning/log.md`에 기준 커밋 해시와 리뷰 결과를 남겨 다음 diff 범위를 고정
-
----
-
-## 7. 3단계 묶음 QA Sweep (`qa-sweep.md`)
-
-기능 WP가 한 묶음(예: Phase 1종료 또는 5~10 WP) 누적되면 **전용 QA Sweep WP**를 열어 3단계로 텁니다:
-
-1. **Stage 1 — 기능별 QA**: 각 기능의 Happy path + 경계 + 예외를 검증하고, 에이전트 검증 항목과 사람 GUI 시각 항목을 표로 분리합니다.
-2. **Stage 2 — 통합 시나리오 QA**: 사용자 1~2명의 실제 업무 플로우로 여러 기능을 한 번에 엮어 End-to-End 실행합니다(단위/계약 테스트 통과가 놓치는 Docker 이미지 누락, 볼륨 마운트 누락, URL 분기 오류를 여기서 잡습니다).
-3. **Stage 3 — Adversarial 공격 표면 점검**: 신규 기능의 권한 누락, 입력 정규화(제어문자·zero-width 우회·초장문 DoS), 멱등성/경합, 미존재 리소스 참조를 공격 관점으로 훑은 뒤, 실위험 항목만 묶어 **후속 Bugfix WP**로 일괄 정리합니다.
+- **5-WP 패턴 리뷰**: `log.md`의 `리뷰 기준 WP: PROJ-WP-NNN` 이후 5개 이상 WP가 검증 완료되면 `check_planning.py`가 `pattern-review-due` 경고를 띄웁니다. `git diff`로 DDD/레이어/추상화 드리프트를 점검하고 `log.md`의 `리뷰 기준 WP:`를 최신 번호로 올립니다.
+- **3단계 QA Sweep (`templates/qa-sweep.md`)**: 기능 묶음 완료 시 ① 기능별 QA → ② 통합 시나리오 E2E → ③ Adversarial 공격표면 점검으로 실배포 결함을 텁니다.
+- **교훈 증류 (`--distill`)**: 범용 트러블슈팅 인사이트가 나온 WP에만 `Reusable Insight: <1줄>`을 적어두고, Phase 종료 시 `sync_planning.py --distill`로 모아 `40-architecture/`, `policy-qa-checklist.md`, 또는 중앙 기술 위키로 승격합니다.

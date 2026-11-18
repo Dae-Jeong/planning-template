@@ -4,10 +4,15 @@
 
 ## 메타
 
+- Phase: 1
 - Status: draft
-- Owner: Verifier / Decision Owner (GUI 시각)
-- Covers: (대상 WP 목록)
-- Dependencies:
+- Owner: Verifier / Decision Owner
+- Covers SPEC: -
+- Related Decision: -
+- Dependencies: -
+- Blocker: -
+- Human Check: Stage 1-B 시각/실단말 항목 확인 및 Stage 3 보류/수용 결정
+- Reusable Insight: none
 
 ## QA 대상 목록
 
@@ -51,3 +56,4 @@
 - [ ] Stage 1 자동/수동 항목 구분 및 실행 완료
 - [ ] Stage 2 통합 시나리오 Log/DB/FE 확인 완료
 - [ ] Stage 3 Adversarial 실위험 항목만 후속 Fix WP 또는 백로그로 분리 완료
+- [ ] Decision Owner / Human Check 최종 확인

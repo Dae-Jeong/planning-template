@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -12,12 +13,54 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import MODES, TEMPLATES_DIR, render_template  # noqa: E402
+from sync_planning import sync_work_board_file  # noqa: E402
 
 
 def normalize_slug(value: str) -> str:
     """Normalize a project name or directory name into a lowercase kebab-case slug."""
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip()).strip("-").lower()
     return slug or "project"
+
+
+def resolve_git_exclude_file(target_root: Path) -> Path | None:
+    """Locate .git/info/exclude for normal repos or git worktrees if target_root is a git worktree."""
+    proc = subprocess.run(
+        ["git", "-C", str(target_root), "rev-parse", "--git-path", "info/exclude"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    raw = proc.stdout.strip()
+    if not raw:
+        return None
+    exclude_path = Path(raw)
+    if not exclude_path.is_absolute():
+        exclude_path = (target_root / exclude_path).resolve()
+    return exclude_path
+
+
+def ensure_local_git_exclude(target_root: Path, mode: str, dry_run: bool) -> str | None:
+    """Append local planning paths to .git/info/exclude idempotently for solo adoption in shared repos."""
+    exclude_path = resolve_git_exclude_file(target_root)
+    if exclude_path is None:
+        return None
+
+    entries = (
+        ["/wiki/", "/tasks/", "/AGENTS.planning.snippet.md"]
+        if mode == "multi-repo-impl"
+        else ["/planning/", "/tasks/", "/AGENTS.planning.snippet.md"]
+    )
+    existing = exclude_path.read_text(encoding="utf-8") if exclude_path.is_file() else ""
+    existing_lines = {line.strip() for line in existing.splitlines()}
+    missing = [entry for entry in entries if entry not in existing_lines]
+    if missing and not dry_run:
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        prefix = "" if (not existing or existing.endswith("\n")) else "\n"
+        block = f"{prefix}# planning-template local-only solo mode\n" + "\n".join(missing) + "\n"
+        exclude_path.write_text(existing + block, encoding="utf-8")
+    return str(exclude_path)
 
 
 def collect_plan(
@@ -104,6 +147,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-api", action="store_true", help="Omit 20-spec/api/ contract baseline")
     parser.add_argument("--no-qa", action="store_true", help="Omit 20-spec/qa-matrix.md baseline")
     parser.add_argument(
+        "--local-exclude",
+        action="store_true",
+        help="Add planning/ and snippet files to .git/info/exclude for solo local operation in a team repo",
+    )
+    parser.add_argument(
         "--inject-agents",
         choices=("auto", "snippet", "skip"),
         default="auto",
@@ -152,13 +200,22 @@ def main(argv: list[str] | None = None) -> int:
             "error": "Existing destination files found (pass --force to overwrite)",
             "conflicts": conflicts,
         }
-        print(json.dumps(msg, ensure_ascii=False, indent=2) if args.json else f"Conflicts found:\n  " + "\n  ".join(conflicts), file=sys.stderr)
+        print(
+            json.dumps(msg, ensure_ascii=False, indent=2)
+            if args.json
+            else "Conflicts found:\n  " + "\n  ".join(conflicts),
+            file=sys.stderr,
+        )
         return 1
 
     if not args.dry_run:
         for dst, content in plan:
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(content, encoding="utf-8")
+        if args.mode in ("standalone", "multi-repo-central"):
+            sync_work_board_file(target_root / "planning", dry_run=False)
+
+    exclude_file = ensure_local_git_exclude(target_root, args.mode, args.dry_run) if args.local_exclude else None
 
     summary = {
         "ok": True,
@@ -168,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         "code": code,
         "slug": slug,
         "obsidian": args.obsidian,
+        "local_exclude": exclude_file,
         "files_count": len(plan),
         "files": [str(dst.relative_to(target_root)) for dst, _ in plan],
     }
@@ -176,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         verb = "Would create" if args.dry_run else "Created"
         print(f"{verb} {len(plan)} files in {target_root} (mode={args.mode}, code={code}, obsidian={args.obsidian})")
+        if exclude_file:
+            print(f"Updated local git exclude: {exclude_file}")
         print(f"Next: python3 {Path(__file__).resolve().parent / 'check_planning.py'} --target {target_root}")
     return 0
 

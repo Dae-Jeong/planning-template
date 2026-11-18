@@ -4,18 +4,22 @@ __PROJECT_NAME__ 프로젝트의 Decision / Spec / Work / Architecture / QA / Lo
 
 ## 메타
 
+- Phase: 0
 - Status: done
 - Owner: owner
 - Covers SPEC: __PROJECT_CODE__-SPEC-001
 - Related Decision: __PROJECT_CODE__-DEC-001
 - Dependencies: -
+- Blocker: -
+- Human Check: none
+- Reusable Insight: none
 
 ## Scope
 
 ### In
 
 - `planning/` 기본 계층(`00-baseline` ~ `90-archive`, `rules/`, `templates/`, `log.md`) 초기화
-- `check_planning` 무결성 기준 충족
+- `sync_planning` 자동 보드 렌더링 및 `check_planning` 무결성 기준 충족
 
 ### Out
 
@@ -24,17 +28,18 @@ __PROJECT_NAME__ 프로젝트의 Decision / Spec / Work / Architecture / QA / Lo
 ## Execution Plan
 
 1. `10-decision.md`, `20-spec.md`, `30-work.md` 및 `rules/`·`templates/` 생성
-2. 무결성 검사(`check_planning`) 통과 확인
+2. `sync_planning` 자동 동기화 및 무결성 검사(`check_planning`) 통과 확인
 3. `10-decision.md`의 `__PROJECT_CODE__-OPEN-001` 구체화 및 첫 기능 WP 착수
 
 ## 요구사항 대비 완성도 매트릭스
 
 | REQ-ID | 내용 | 상태 | 근거 | 누락 사유 |
 | --- | --- | --- | --- | --- |
-| __PROJECT_CODE__-REQ-001 | planning 정본 파일과 링크·ID 무결성이 성립한다 | PASS | `init_planning.py` 및 `check_planning.py` 초기 검증 | - |
+| __PROJECT_CODE__-REQ-001 | planning 정본 파일과 자동 보드·링크·ID 무결성이 성립한다 | PASS | `init_planning.py` 및 `check_planning.py` 초기 검증 | - |
 
 ## Release Gate
 
 - [x] `10-decision.md`, `20-spec.md`, `30-work.md`, `log.md`가 존재한다
 - [x] `rules/` 4종과 `templates/`가 연결되어 있다
-- [x] 깨진 링크와 미치환 placeholder가 없다
+- [x] 깨진 링크, 미치환 placeholder, 보드 불일치가 없다
+- [x] Decision Owner / Human Check 최종 확인
